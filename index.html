@@ -1,95 +1,190 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LinkGuard AI</title>
+    <title>LinkGuard Pro | Professional Security</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #020617;
+            color: #f3f4f6;
+            margin: 0;
+        }
+        .security-card {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .danger-border {
+            border-color: rgba(239, 68, 68, 0.3) !important;
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.1) !important;
+        }
+    </style>
 </head>
-<body class="bg-[#020617]">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
         const { useState } = React;
-        const { Shield, Search, Zap, Info, ShieldAlert } = lucide;
 
         const App = () => {
             const [url, setUrl] = useState('');
             const [loading, setLoading] = useState(false);
             const [result, setResult] = useState(null);
-
-            // DEIN KEY HIER EINTRAGEN
-            const apiKey = "AIzaSyB02PD-sjoZeH_fDbQZl5kSxlCYb3Yfi58"; 
+            
+            // Dein bereitgestellter API Key
+            const apiKey = "AIzaSyB02PD-sjoZeH_fDbQZl5kSxlCYb3Yfi58";
 
             const analyzeLink = async () => {
-                if (!url) return;
+                if (!url.trim()) return;
                 setLoading(true);
                 setResult(null);
 
-                const systemPrompt = "Respond ONLY in JSON format: { \"score\": 0-100, \"status\": \"Safe\" | \"Suspicious\" | \"High Risk\", \"verdict\": \"Summary\", \"details\": [\"Point 1\"] }";
+                // Der "schlaue" System Prompt für präzise Scam-Erkennung
+                const systemPrompt = `You are an elite Cyber Security Intelligence System. 
+                Analyze the provided URL for:
+                1. IP Grabbers (e.g., Grabify, IPLogger).
+                2. Phishing attempts (look-alike domains, suspicious keywords like 'nitro', 'billing', 'secure-login').
+                3. Malicious redirects.
+                
+                Respond ONLY in a valid JSON format:
+                {
+                    "score": 0-100 (0=malicious, 100=perfectly safe),
+                    "status": "Safe" | "Suspicious" | "High Risk" | "Malicious",
+                    "verdict": "A professional, one-sentence summary of the threat level.",
+                    "details": ["Specific observation 1", "Specific observation 2", "Specific observation 3"],
+                    "isPhishing": true/false
+                }`;
 
                 try {
-                    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent?key=${apiKey}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            contents: [{ parts: [{ text: `Analyze this URL for safety: ${url}` }] }],
-                            systemInstruction: { parts: [{ text: systemPrompt }] },
-                            generationConfig: { responseMimeType: "application/json" }
-                        })
-                    });
+                    // Exponential Backoff Implementation
+                    let attempt = 0;
+                    let success = false;
+                    let data;
 
-                    const data = await response.json();
-                    
-                    if (data.error) {
-                        throw new Error(data.error.message);
+                    while(attempt < 3 && !success) {
+                        try {
+                            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    contents: [{ parts: [{ text: `Analyze this link for security threats: ${url}` }] }],
+                                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                                    generationConfig: { 
+                                        responseMimeType: "application/json",
+                                        temperature: 0.1 
+                                    }
+                                })
+                            });
+                            data = await response.json();
+                            success = true;
+                        } catch (e) {
+                            attempt++;
+                            await new Promise(res => setTimeout(res, 1000 * Math.pow(2, attempt)));
+                        }
                     }
 
-                    const rawText = data.candidates[0].content.parts[0].text;
-                    // Filtert mögliches Markdown weg
-                    const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
-                    setResult(JSON.parse(cleanJson));
-
-                } catch (e) { 
-                    alert("Fehler: " + e.message); 
-                } finally { 
-                    setLoading(false); 
+                    if (data && data.candidates) {
+                        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+                        setResult(parsed);
+                    }
+                } catch (err) {
+                    console.error("Critical error during analysis", err);
+                } finally {
+                    setLoading(false);
                 }
             };
 
             return (
-                <div className="min-h-screen text-slate-100 p-6 flex flex-col items-center">
-                    <h1 className="text-5xl font-bold mt-10 mb-4">LinkGuard<span className="text-blue-500">.</span></h1>
-                    <p className="text-slate-400 mb-10">Sicherheitsanalyse powered by Gemini 1.5 Flash-8B</p>
-                    
-                    <div className="w-full max-w-2xl bg-slate-900/50 border border-slate-800 p-2 rounded-3xl flex gap-2">
-                        <input 
-                            type="text" 
-                            value={url} 
-                            onChange={(e) => setUrl(e.target.value)} 
-                            placeholder="https://..." 
-                            className="flex-grow bg-transparent p-4 outline-none"
-                        />
-                        <button onClick={analyzeLink} className="bg-blue-600 px-8 py-4 rounded-2xl font-bold hover:bg-blue-500 transition-all">
-                            {loading ? "Prüfe..." : "Verify"}
-                        </button>
-                    </div>
+                <div className="min-h-screen flex flex-col items-center justify-center p-4 md:p-10">
+                    <div className="w-full max-w-2xl animate-in fade-in duration-700">
+                        {/* Title Section */}
+                        <div className="text-center mb-12">
+                            <div className="inline-block p-3 rounded-2xl bg-blue-500/10 mb-4 border border-blue-500/20">
+                                <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                            </div>
+                            <h1 className="text-4xl font-extrabold text-white tracking-tight">LinkGuard <span className="text-blue-500">Pro</span></h1>
+                            <p className="text-slate-400 mt-2">Enterprise-Grade AI URL Inspection</p>
+                        </div>
 
-                    {result && (
-                        <div className="mt-8 w-full max-w-2xl bg-slate-900 border border-slate-800 p-8 rounded-3xl animate-in fade-in slide-in-from-bottom-2">
-                            <div className="flex items-center gap-6">
-                                <div className="text-4xl font-bold text-blue-500">{result.score}</div>
-                                <div>
-                                    <div className="text-xs font-bold uppercase tracking-widest text-slate-500">{result.status}</div>
-                                    <p className="text-slate-300 mt-1">{result.verdict}</p>
+                        {/* Input Area */}
+                        <div className="security-card p-2 flex flex-col md:flex-row gap-2 mb-8">
+                            <input 
+                                type="text" 
+                                value={url}
+                                onChange={(e) => setUrl(e.target.value)}
+                                placeholder="https://suspicious-link.com/..."
+                                className="flex-grow bg-transparent px-6 py-4 outline-none text-white placeholder-slate-600 border-none"
+                            />
+                            <button 
+                                onClick={analyzeLink}
+                                disabled={loading || !url}
+                                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold px-10 py-4 rounded-xl transition-all flex items-center justify-center gap-2"
+                            >
+                                {loading ? (
+                                    <span className="flex items-center gap-2">
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                        Inspecting...
+                                    </span>
+                                ) : "Verify URL"}
+                            </button>
+                        </div>
+
+                        {/* Result Display */}
+                        {result && (
+                            <div className={`security-card p-8 animate-in slide-in-from-bottom-4 duration-500 ${result.score < 40 ? 'danger-border' : ''}`}>
+                                <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-8">
+                                    <div className="relative w-24 h-24">
+                                        <svg className="w-full h-full -rotate-90">
+                                            <circle cx="48" cy="48" r="44" fill="transparent" stroke="#1e293b" strokeWidth="6" />
+                                            <circle 
+                                                cx="48" cy="48" r="44" 
+                                                fill="transparent" 
+                                                stroke={result.score < 40 ? '#ef4444' : (result.score < 80 ? '#f59e0b' : '#10b981')} 
+                                                strokeWidth="6" 
+                                                strokeDasharray="276.46"
+                                                strokeDashoffset={276.46 - (result.score / 100) * 276.46}
+                                                strokeLinecap="round"
+                                                className="transition-all duration-1000"
+                                            />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center font-bold text-xl">
+                                            {result.score}
+                                        </div>
+                                    </div>
+                                    <div className="text-center md:text-right">
+                                        <div className={`text-[10px] font-black tracking-widest uppercase px-3 py-1 rounded-full mb-2 inline-block ${result.score < 40 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`}>
+                                            Status: {result.status}
+                                        </div>
+                                        <h2 className="text-2xl font-bold text-white mb-1">
+                                            {result.score < 40 ? "Threat Detected" : "Assessment Complete"}
+                                        </h2>
+                                        <p className="text-slate-400 text-sm italic">{result.verdict}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 bg-black/20 p-5 rounded-2xl border border-white/5">
+                                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Technical Insights</h3>
+                                    {result.details.map((detail, i) => (
+                                        <div key={i} className="flex items-start gap-3 text-sm text-slate-300">
+                                            <div className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${result.score < 40 ? 'bg-red-500' : 'bg-blue-500'}`} />
+                                            <p>{detail}</p>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             );
         };
@@ -99,3 +194,4 @@
     </script>
 </body>
 </html>
+
